@@ -1,0 +1,164 @@
+name: "Run Python in QEMU"
+description: "Runs a script in a QEMU cross-arch environment with Python installed"
+author: "Frequenz Energy-as-a-Service GmbH"
+
+# Refer to the following link(s) for more information on inputs:
+# https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#inputs
+inputs:
+  architecture:
+    description: >
+      The architecture to build the Docker image for. This is passed to the
+      `docker/setup-qemu-action`. For example, `arm`, `arm64`, etc.
+    required: true
+  python_version:
+    description: >
+      The Python version to use. If `dockerfile` is not set, this version
+      should be present as an Ubuntu package in provided `ubuntu_version`. For
+      example, `3.11`, `3.12`, etc. The package `python{python_version}` will
+      be installed and used.
+
+      If `dockerfile` is set, then the way to specify the Python version is
+      up to the `dockerfile`, but it should install the requested Python
+      version and set it as the default `python` and `python3` commands.
+    required: true
+  script:
+    description: >
+      The script to run in the Docker container. This is passed to the `docker
+      run` command without any extra arguments. It will be copied to
+      `/usr/local/bin` in the Docker image.
+    required: true
+  pass_env:
+    description: >
+      A list of environment variables to pass to the Docker container. The
+      format is `VAR1=VALUE1 VAR2=VALUE2 ...`. For example, `FOO=bar BAZ=qux`.
+
+      The environment variables will be set in the Docker container before
+      running the script.
+
+      Due to current limitations, values can't have spaces or other special
+      characters interpreted by bash.
+    required: false
+    default: ""
+  ubuntu_version:
+    description: >
+      The Ubuntu version to use as the base image where Python will be
+      installed. For example, `20.04`, `22.04`, etc.
+
+      Required unless a custom `dockerfile` is provided, in which case it's
+      optional.
+    required: false
+    default: ""
+  dockerfile:
+    description: >
+      The Dockerfile to use to build the Docker image. The docker context will
+      be set to the directory containing the Dockerfile.
+
+      Required unless `ubuntu_version` and `python_version` are provided, in
+      which case it should be empty (the default).
+    required: false
+    default: ""
+
+
+# Refer to the following link(s) for more information on the composite run steps:
+# https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions#runs
+runs:
+  using: "composite"
+  steps:
+    - name: Print environment (debug)
+      shell: bash
+      run: env
+
+    - name: Check inputs
+      shell: bash
+      run: |
+        if test -z "${{ inputs.dockerfile }}" -a -z "${{ inputs.ubuntu_version }}"; then \
+            echo "::error ::At least one of `dockerfile` or `ubuntu_version` should be set"; \
+            exit 1; \
+          fi; \
+        fi
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@68827325e0b33c7199eb31dd4e31fbe9023e06e3 # v3.0.0
+      with:
+        platforms: linux/${{ inputs.architecture }}
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
+
+    # This is a workaround to prevent the cache from growing indefinitely.
+    # https://docs.docker.com/build/ci/github-actions/cache/#local-cache
+    # https://github.com/docker/build-push-action/issues/252
+    # https://github.com/moby/buildkit/issues/1896
+    - name: Cache container layers
+      uses: actions/cache@13aacd865c20de90d75de3b17ebe84f7a17d57d2 # v4.0.0
+      with:
+        path: /tmp/.buildx-cache
+        key: cross-arch-python-${{ runner.os }}-${{ inputs.architecture }}-{{ inputs.ubuntu_version }}-${{ inputs.python_version }}
+
+    - name: Copy the script to the docker context
+      shell: bash
+      env:
+        SCRIPT: ${{ inputs.script }}
+        CONTEXT: ${{ inputs.dockerfile == '' && format('{0}/docker", github.action_path) || dirname(inputs.dockerfile) }}
+      run: cp -r "$SCRIPT" "$CONTEXT/"
+
+    - name: Build image
+      uses: docker/build-push-action@4a13e500e55cf31b7a5d59a38ab2040ab0f42f56 # v5.1.0
+      with:
+        context: ${{ inputs.dockerfile == '' && format('{0}/docker", github.action_path) || dirname(inputs.dockerfile) }}
+        file: ${{ inputs.dockerfile == '' && format('{0}/docker/Dockerfile', github.action_path) || inputs.dockerfile }}
+        platforms: linux/${{ inputs.architecture }}
+        tags: localhost/cross-arch-python:latest
+        push: false
+        load: true
+        build-args:
+          - "UBUNTU_VERSION=${{ inputs.ubuntu_version }}"
+          - "PYTHON_VERSION=${{ inputs.python_version }}"
+          - "SCRIPT=${{ inputs.script }}"
+        cache-from: type=local,src=/tmp/.buildx-cache
+        cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+    # Refer to the workaround mentioned above
+    - name: Move cache
+      shell: bash
+      run: |
+        rm -rf /tmp/.buildx-cache
+        mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+    # Cache pip downloads
+    - name: Cache pip downloads
+      uses: actions/cache@13aacd865c20de90d75de3b17ebe84f7a17d57d2 # v4.0.0
+      with:
+        path: /tmp/pip-cache
+        key: cross-arch-python-${{ runner.os }}-${{ inputs.architecture }}-{{ inputs.ubuntu_version }}-${{ inputs.python_version }}
+
+    # This ensures that the docker container has access to the pip cache.
+    # Changing the user in the docker-run step causes it to fail due to
+    # incorrect permissions. Setting the ownership of the pip cache to root
+    # before running is a workaround to this issue.
+    - name: Set pip cache owners to root for docker
+      shell: bash
+      run: if test -e /tmp/pip-cache; then sudo chown -R root:root /tmp/pip-cache; fi
+
+    - name: Run the command
+      shell: bash
+      env:
+        SCRIPT: ${{ inputs.executable }}
+        PASS_ENV: ${{ inputs.pass_env }}
+      run: |
+        docker run \
+          --rm \
+          -v $(pwd):/${{ github.workspace }} \
+          -v /tmp/pip-cache:/root/.cache/pip \
+          -w ${{ github.workspace }} \
+          $(echo "$PASS_ENV" | sed 's/\([^ ]\+\)/-e \1/g') \
+          --net=host \
+          --platform linux/${{ inputs.architecture }} \
+          localhost/cross-arch-python:latest \
+          "/usr/local/bin/$SCRIPT"
+
+    # This ensures that the runner has access to the pip cache.
+    - name: Reset pip cache ownership
+      shell: bash
+      if: always()
+      run: sudo chown -R $USER:$USER /tmp/pip-cache
