@@ -6,6 +6,17 @@ This action runs a custom script in a cross-arch Python environment using
 By default an Ubuntu-based environment is used, but you can use a custom
 `Dockerfile` to use a different OS.
 
+## Security considerations
+
+This action executes a repository-provided script and can optionally build from
+a repository-provided `Dockerfile`. Treat both as trusted code that runs with
+the workflow job's permissions.
+
+Do not run this action on untrusted code in privileged contexts such as
+`pull_request_target`. Prefer `pull_request` for untrusted contributions, limit
+token permissions, and avoid exposing sensitive secrets to jobs that invoke
+this action.
+
 Here is an example demonstrating how to use it in a workflow with a matrix job:
 
 ```yaml
