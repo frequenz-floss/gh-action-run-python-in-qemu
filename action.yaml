@@ -145,7 +145,7 @@ runs:
     - name: Run the command
       shell: bash
       env:
-        SCRIPT: ${{ inputs.executable }}
+        SCRIPT: ${{ inputs.script }}
         PASS_ENV: ${{ inputs.pass_env }}
         WORKSPACE: ${{ github.workspace }}
         ARCHITECTURE: ${{ inputs.architecture }}
