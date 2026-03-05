@@ -70,11 +70,13 @@ runs:
 
     - name: Check inputs
       shell: bash
+      env:
+        DOCKERFILE: ${{ inputs.dockerfile }}
+        UBUNTU_VERSION: ${{ inputs.ubuntu_version }}
       run: |
-        if test -z "${{ inputs.dockerfile }}" -a -z "${{ inputs.ubuntu_version }}"; then \
-            echo "::error ::At least one of `dockerfile` or `ubuntu_version` should be set"; \
-            exit 1; \
-          fi; \
+        if test -z "$DOCKERFILE" -a -z "$UBUNTU_VERSION"; then
+          echo "::error ::At least one of 'dockerfile' or 'ubuntu_version' should be set"
+          exit 1
         fi
 
     - name: Set up QEMU
