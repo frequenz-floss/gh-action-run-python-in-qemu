@@ -147,15 +147,17 @@ runs:
       env:
         SCRIPT: ${{ inputs.executable }}
         PASS_ENV: ${{ inputs.pass_env }}
+        WORKSPACE: ${{ github.workspace }}
+        ARCHITECTURE: ${{ inputs.architecture }}
       run: |
         docker run \
           --rm \
-          -v $(pwd):/${{ github.workspace }} \
+          -v "$(pwd):$WORKSPACE" \
           -v /tmp/pip-cache:/root/.cache/pip \
-          -w ${{ github.workspace }} \
+          -w "$WORKSPACE" \
           $(echo "$PASS_ENV" | sed 's/\([^ ]\+\)/-e \1/g') \
           --net=host \
-          --platform linux/${{ inputs.architecture }} \
+          --platform "linux/$ARCHITECTURE" \
           localhost/cross-arch-python:latest \
           "/usr/local/bin/$SCRIPT"
 
