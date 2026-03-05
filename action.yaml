@@ -95,7 +95,7 @@ runs:
       uses: actions/cache@13aacd865c20de90d75de3b17ebe84f7a17d57d2 # v4.0.0
       with:
         path: /tmp/.buildx-cache
-        key: cross-arch-python-${{ runner.os }}-${{ inputs.architecture }}-{{ inputs.ubuntu_version }}-${{ inputs.python_version }}
+        key: cross-arch-python-${{ runner.os }}-${{ inputs.architecture }}-${{ inputs.ubuntu_version }}-${{ inputs.python_version }}
 
     - name: Copy the script to the docker context
       shell: bash
@@ -132,7 +132,7 @@ runs:
       uses: actions/cache@13aacd865c20de90d75de3b17ebe84f7a17d57d2 # v4.0.0
       with:
         path: /tmp/pip-cache
-        key: cross-arch-python-${{ runner.os }}-${{ inputs.architecture }}-{{ inputs.ubuntu_version }}-${{ inputs.python_version }}
+        key: cross-arch-python-${{ runner.os }}-${{ inputs.architecture }}-${{ inputs.ubuntu_version }}-${{ inputs.python_version }}
 
     # This ensures that the docker container has access to the pip cache.
     # Changing the user in the docker-run step causes it to fail due to
