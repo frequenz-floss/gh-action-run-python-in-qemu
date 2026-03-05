@@ -156,7 +156,6 @@ runs:
           -v /tmp/pip-cache:/root/.cache/pip \
           -w "$WORKSPACE" \
           $(echo "$PASS_ENV" | sed 's/\([^ ]\+\)/-e \1/g') \
-          --net=host \
           --platform "linux/$ARCHITECTURE" \
           localhost/cross-arch-python:latest \
           "/usr/local/bin/$SCRIPT"
