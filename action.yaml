@@ -150,12 +150,20 @@ runs:
         WORKSPACE: ${{ github.workspace }}
         ARCHITECTURE: ${{ inputs.architecture }}
       run: |
+        env_args=()
+        if test -n "$PASS_ENV"; then
+          read -r -a pass_env_items <<< "$PASS_ENV"
+          for pass_env_item in "${pass_env_items[@]}"; do
+            env_args+=(--env "$pass_env_item")
+          done
+        fi
+
         docker run \
           --rm \
           -v "$(pwd):$WORKSPACE" \
           -v /tmp/pip-cache:/root/.cache/pip \
           -w "$WORKSPACE" \
-          $(echo "$PASS_ENV" | sed 's/\([^ ]\+\)/-e \1/g') \
+          "${env_args[@]}" \
           --platform "linux/$ARCHITECTURE" \
           localhost/cross-arch-python:latest \
           "/usr/local/bin/$SCRIPT"
