@@ -27,11 +27,11 @@ RUN apt-get update -y && \
     rm -rf /var/lib/apt/lists/*
 
 # Install pip
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python${PYTHON_VERSION}
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python${PYTHON_VERSION} -I
 
 RUN update-alternatives --install \
         /usr/local/bin/python python /usr/bin/python${PYTHON_VERSION} 1 && \
-    python -m pip install --upgrade --no-cache-dir pip
+    python -I -m pip install --upgrade --no-cache-dir pip
 
 COPY entrypoint /usr/local/bin/entrypoint
 COPY ${SCRIPT} /usr/local/bin/${SCRIPT}

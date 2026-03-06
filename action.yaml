@@ -70,11 +70,13 @@ runs:
 
     - name: Check inputs
       shell: bash
+      env:
+        DOCKERFILE: ${{ inputs.dockerfile }}
+        UBUNTU_VERSION: ${{ inputs.ubuntu_version }}
       run: |
-        if test -z "${{ inputs.dockerfile }}" -a -z "${{ inputs.ubuntu_version }}"; then \
-            echo "::error ::At least one of `dockerfile` or `ubuntu_version` should be set"; \
-            exit 1; \
-          fi; \
+        if test -z "$DOCKERFILE" -a -z "$UBUNTU_VERSION"; then
+          echo "::error ::At least one of 'dockerfile' or 'ubuntu_version' should be set"
+          exit 1
         fi
 
     - name: Set up QEMU
@@ -93,19 +95,19 @@ runs:
       uses: actions/cache@13aacd865c20de90d75de3b17ebe84f7a17d57d2 # v4.0.0
       with:
         path: /tmp/.buildx-cache
-        key: cross-arch-python-${{ runner.os }}-${{ inputs.architecture }}-{{ inputs.ubuntu_version }}-${{ inputs.python_version }}
+        key: cross-arch-python-${{ runner.os }}-${{ inputs.architecture }}-${{ inputs.ubuntu_version }}-${{ inputs.python_version }}
 
     - name: Copy the script to the docker context
       shell: bash
       env:
         SCRIPT: ${{ inputs.script }}
-        CONTEXT: ${{ inputs.dockerfile == '' && format('{0}/docker", github.action_path) || dirname(inputs.dockerfile) }}
+        CONTEXT: ${{ inputs.dockerfile == '' && format('{0}/docker', github.action_path) || dirname(inputs.dockerfile) }}
       run: cp -r "$SCRIPT" "$CONTEXT/"
 
     - name: Build image
       uses: docker/build-push-action@4a13e500e55cf31b7a5d59a38ab2040ab0f42f56 # v5.1.0
       with:
-        context: ${{ inputs.dockerfile == '' && format('{0}/docker", github.action_path) || dirname(inputs.dockerfile) }}
+        context: ${{ inputs.dockerfile == '' && format('{0}/docker', github.action_path) || dirname(inputs.dockerfile) }}
         file: ${{ inputs.dockerfile == '' && format('{0}/docker/Dockerfile', github.action_path) || inputs.dockerfile }}
         platforms: linux/${{ inputs.architecture }}
         tags: localhost/cross-arch-python:latest
@@ -130,7 +132,7 @@ runs:
       uses: actions/cache@13aacd865c20de90d75de3b17ebe84f7a17d57d2 # v4.0.0
       with:
         path: /tmp/pip-cache
-        key: cross-arch-python-${{ runner.os }}-${{ inputs.architecture }}-{{ inputs.ubuntu_version }}-${{ inputs.python_version }}
+        key: cross-arch-python-${{ runner.os }}-${{ inputs.architecture }}-${{ inputs.ubuntu_version }}-${{ inputs.python_version }}
 
     # This ensures that the docker container has access to the pip cache.
     # Changing the user in the docker-run step causes it to fail due to
@@ -143,17 +145,26 @@ runs:
     - name: Run the command
       shell: bash
       env:
-        SCRIPT: ${{ inputs.executable }}
+        SCRIPT: ${{ inputs.script }}
         PASS_ENV: ${{ inputs.pass_env }}
+        WORKSPACE: ${{ github.workspace }}
+        ARCHITECTURE: ${{ inputs.architecture }}
       run: |
+        env_args=()
+        if test -n "$PASS_ENV"; then
+          read -r -a pass_env_items <<< "$PASS_ENV"
+          for pass_env_item in "${pass_env_items[@]}"; do
+            env_args+=(--env "$pass_env_item")
+          done
+        fi
+
         docker run \
           --rm \
-          -v $(pwd):/${{ github.workspace }} \
+          -v "$(pwd):$WORKSPACE" \
           -v /tmp/pip-cache:/root/.cache/pip \
-          -w ${{ github.workspace }} \
-          $(echo "$PASS_ENV" | sed 's/\([^ ]\+\)/-e \1/g') \
-          --net=host \
-          --platform linux/${{ inputs.architecture }} \
+          -w "$WORKSPACE" \
+          "${env_args[@]}" \
+          --platform "linux/$ARCHITECTURE" \
           localhost/cross-arch-python:latest \
           "/usr/local/bin/$SCRIPT"
 
